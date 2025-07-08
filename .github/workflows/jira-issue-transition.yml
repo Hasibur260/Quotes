@@ -1,0 +1,52 @@
+name: Transition Jira Issue on Pull Request
+
+on:
+  pull_request:
+    branches:
+      - QUOTES-2-Start-backend-development
+    types:
+      - opened
+
+jobs:
+  transition-jira-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Jira Issue Key
+        id: extract-jira-key
+        run: |
+          # Extract Jira issue key (e.g., DREAM-123) from PR title or body
+          JIRA_KEY=$(echo "${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}" | grep -oE 'DREAM-[0-9]+' | head -n 1)
+          if [ -z "$JIRA_KEY" ]; then
+            echo "No Jira issue key found in PR title or body."
+            exit 1
+          fi
+          echo "JIRA_KEY=$JIRA_KEY" >> $GITHUB_OUTPUT
+
+      - name: Transition Jira Issue to In Progress
+        env:
+          JIRA_BASE_URL: https://hasibshanto260.atlassian.net
+          JIRA_USER_EMAIL: hasibshanto260@gmail.com
+          JIRA_API_TOKEN: ATATT3xFfGF0aYfY8kJOhzQdW6jgUG9WVpDpdV8PhZF4MUMJodS0IFJDm2TEwdk-EOZ7GqgARv2aEvuXpr2gGo7UI3T3oKjN5yipi2XmaEmELNVDhURVv87uz9QF_tEa4gQZZrVWcV_rQM9KtT4KrJx46MgizAjjoPpWT9oMvN2s2CDWo3ghANI=BEB730FE
+          JIRA_ISSUE_KEY: ${{ steps.extract-jira-key.outputs.JIRA_KEY }}
+        run: |
+          # Get the transition ID for "In Progress" (status ID: 10035)
+          TRANSITION_ID=$(curl -s -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+            -X GET \
+            -H "Accept: application/json" \
+            "$JIRA_BASE_URL/rest/api/2/issue/$JIRA_ISSUE_KEY/transitions" | jq -r '.transitions[] | select(.to.id == "10035") | .id')
+          
+          if [ -z "$TRANSITION_ID" ]; then
+            echo "Transition to 'In Progress' (status ID: 10035) not found for issue $JIRA_ISSUE_KEY."
+            exit 1
+          fi
+
+          # Perform the transition to "In Progress"
+          curl -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+            -X POST \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            "$JIRA_BASE_URL/rest/api/2/issue/$JIRA_ISSUE_KEY/transitions" \
+            -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"
